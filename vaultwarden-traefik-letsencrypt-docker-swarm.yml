@@ -1,0 +1,94 @@
+# Vaultwarden with Let's Encrypt in a Docker Swarm
+
+# Author
+# hey, I’m Vladimir Mikhalev, but my friends call me Valdemar.
+
+# My website with detailed IT guides: https://www.heyvaldemar.com/
+# Follow me on YouTube: https://www.youtube.com/channel/UCf85kQ0u1sYTTTyKVpxrlyQ?sub_confirmation=1
+# Follow me on Twitter: https://twitter.com/heyValdemar
+# Follow me on Instagram: https://www.instagram.com/heyvaldemar/
+# Follow me on Facebook: https://www.facebook.com/heyValdemarFB/
+# Follow me on TikTok: https://www.tiktok.com/@heyvaldemar
+# Follow me on LinkedIn: https://www.linkedin.com/in/heyvaldemar/
+# Follow me on GitHub: https://github.com/heyvaldemar
+
+# Communication
+# Chat with IT pros on Discord: https://discord.gg/AJQGCCBcqf
+# Reach me at ask@sre.gg
+
+# Give Thanks
+# Support on GitHub: https://github.com/sponsors/heyValdemar
+# Support on Patreon: https://www.patreon.com/heyValdemar
+# Support on BuyMeaCoffee: https://www.buymeacoffee.com/heyValdemar
+# Support on Ko-fi: https://ko-fi.com/heyValdemar
+# Support on PayPal: https://www.paypal.com/paypalme/heyValdemarCOM
+
+# Install Docker Swarm by following my guide: https://www.heyvaldemar.com/install-docker-swarm-on-ubuntu-server/
+
+# Configure Traefik and create secrets for storing the passwords on the Docker Swarm manager node before applying the configuration.
+# Traefik configuration: https://github.com/heyValdemar/traefik-letsencrypt-docker-swarm
+
+# Deploy Vaultwarden in a Docker Swarm using the command:
+# docker stack deploy -c vaultwarden-traefik-letsencrypt-docker-swarm.yml vaultwarden
+
+version: '3.8'
+
+x-default-opts:
+  &default-opts
+  logging:
+    options:
+      max-size: "10m"
+
+networks:
+  vaultwarden-network:
+    driver: overlay
+  traefik-network:
+    external: true
+
+volumes:
+  vaultwarden-data:
+  traefik-certificates:
+
+services:
+  vaultwarden:
+    <<: *default-opts
+    image: vaultwarden/server:1.28.1
+    volumes:
+      - vaultwarden-data:/data
+    environment:
+      WEBSOCKET_ENABLED: "true"
+    networks:
+      - vaultwarden-network
+      - traefik-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == worker
+      # Container resources (replace with yours)
+      resources:
+        limits:
+          cpus: '1.55'
+          memory: 1G
+        reservations:
+          cpus: '0.35'
+          memory: 512M
+      labels:
+        - "traefik.enable=true"
+        # Vaultwarden URL (replace with yours)
+        - "traefik.http.routers.vaultwarden.rule=Host(`vaultwarden.heyvaldemar.net`)"
+        - "traefik.http.routers.vaultwarden.service=vaultwarden"
+        - "traefik.http.routers.vaultwarden.entrypoints=websecure"
+        - "traefik.http.services.vaultwarden.loadbalancer.server.port=80"
+        - "traefik.http.routers.vaultwarden.tls=true"
+        - "traefik.http.routers.vaultwarden.tls.certresolver=letsencrypt"
+        - "traefik.http.services.vaultwarden.loadbalancer.passhostheader=true"
+        - "traefik.http.routers.vaultwarden.middlewares=compresstraefik"
+        - "traefik.http.middlewares.compresstraefik.compress=true"
